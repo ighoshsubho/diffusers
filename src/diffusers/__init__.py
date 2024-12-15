@@ -543,6 +543,7 @@ else:
             "FlaxStableDiffusionInpaintPipeline",
             "FlaxStableDiffusionPipeline",
             "FlaxStableDiffusionXLPipeline",
+            "FlaxStableDiffusion3Pipeline",
         ]
     )
 
