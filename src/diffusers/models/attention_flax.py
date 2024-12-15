@@ -14,10 +14,14 @@
 
 import functools
 import math
+from typing import Optional, Tuple
 
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
+
+from diffusers.models.attention_processor_flax import FlaxJointAttnProcessor2_0
+from diffusers.models.normalization_flax_utils import FlaxAdaLayerNormContinuous, FlaxAdaLayerNormZero, FlaxSD35AdaLayerNormZeroX
 
 
 def _query_chunk_attention(query, key, value, precision, key_chunk_size: int = 4096):
@@ -324,6 +328,165 @@ class FlaxBasicTransformerBlock(nn.Module):
 
         return self.dropout_layer(hidden_states, deterministic=deterministic)
 
+class FlaxJointTransformerBlock(nn.Module):
+    """
+    A Transformer block following the MMDiT architecture, introduced in Stable Diffusion 3.
+
+    Reference: https://arxiv.org/abs/2403.03206
+
+    Parameters:
+        dim (`int`): The number of channels in the input and output.
+        num_attention_heads (`int`): The number of heads to use for multi-head attention.
+        attention_head_dim (`int`): The number of channels in each head.
+        context_pre_only (`bool`): Boolean to determine if we should add some blocks associated with the
+            processing of `context` conditions.
+        qk_norm (`str`, optional): The type of normalization to use for query and key values.
+        use_dual_attention (`bool`): Whether to use dual attention mechanism.
+        dtype (`jnp.dtype`): The dtype of the computation (default: jnp.float32)
+    """
+    dim: int
+    num_attention_heads: int
+    attention_head_dim: int
+    context_pre_only: bool = False
+    qk_norm: Optional[str] = None
+    use_dual_attention: bool = False
+    dtype: jnp.dtype = jnp.float32
+    
+    def setup(self):
+        self.use_dual_attention = self.use_dual_attention
+        self.context_pre_only = self.context_pre_only
+        context_norm_type = "ada_norm_continous" if self.context_pre_only else "ada_norm_zero"
+
+        # Setup main normalization layers
+        if self.use_dual_attention:
+            self.norm1 = FlaxSD35AdaLayerNormZeroX(self.dim, dtype=self.dtype)
+        else:
+            self.norm1 = FlaxAdaLayerNormZero(self.dim, dtype=self.dtype)
+
+        # Setup context normalization layers
+        if context_norm_type == "ada_norm_continous":
+            self.norm1_context = FlaxAdaLayerNormContinuous(
+                self.dim, 
+                self.dim,
+                elementwise_affine=False,
+                eps=1e-6,
+                bias=True,
+                norm_type="layer_norm",
+                dtype=self.dtype
+            )
+        elif context_norm_type == "ada_norm_zero":
+            self.norm1_context = FlaxAdaLayerNormZero(self.dim, dtype=self.dtype)
+        else:
+            raise ValueError(
+                f"Unknown context_norm_type: {context_norm_type}, currently only support `ada_norm_continous`, `ada_norm_zero`"
+            )
+
+        # Setup attention layers
+        self.attn = FlaxAttention(
+            query_dim=self.dim,
+            cross_attention_dim=None,
+            added_kv_proj_dim=self.dim,
+            heads=self.num_attention_heads,
+            dim_head=self.attention_head_dim,
+            out_dim=self.dim,
+            context_pre_only=self.context_pre_only,
+            bias=True,
+            processor=FlaxJointAttnProcessor2_0(),
+            qk_norm=self.qk_norm,
+            eps=1e-6,
+            dtype=self.dtype
+        )
+
+        if self.use_dual_attention:
+            self.attn2 = FlaxAttention(
+                query_dim=self.dim,
+                cross_attention_dim=None,
+                heads=self.num_attention_heads,
+                dim_head=self.attention_head_dim,
+                out_dim=self.dim,
+                bias=True,
+                processor=FlaxJointAttnProcessor2_0(),
+                qk_norm=self.qk_norm,
+                eps=1e-6,
+                dtype=self.dtype
+            )
+        else:
+            self.attn2 = None
+
+        # Setup feed-forward layers
+        self.norm2 = nn.LayerNorm(self.dim, epsilon=1e-6, use_bias=False, dtype=self.dtype)
+        self.ff = FlaxFeedForward(dim=self.dim, dim_out=self.dim, activation_fn="gelu", dtype=self.dtype)
+
+        if not self.context_pre_only:
+            self.norm2_context = nn.LayerNorm(self.dim, epsilon=1e-6, use_bias=False, dtype=self.dtype)
+            self.ff_context = FlaxFeedForward(dim=self.dim, dim_out=self.dim, activation_fn="gelu", dtype=self.dtype)
+        else:
+            self.norm2_context = None
+            self.ff_context = None
+
+    def __call__(
+        self, 
+        hidden_states: jnp.ndarray,
+        encoder_hidden_states: jnp.ndarray,
+        temb: jnp.ndarray,
+        deterministic: bool = True,
+    ) -> Tuple[Optional[jnp.ndarray], jnp.ndarray]:
+        # Apply normalization and get gates
+        if self.use_dual_attention:
+            norm_out = self.norm1(hidden_states, emb=temb)
+            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp, norm_hidden_states2, gate_msa2 = norm_out
+        else:
+            norm_out = self.norm1(hidden_states, emb=temb)
+            norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = norm_out
+
+        # Process context
+        if self.context_pre_only:
+            norm_encoder_hidden_states = self.norm1_context(encoder_hidden_states, temb)
+        else:
+            norm_out_context = self.norm1_context(encoder_hidden_states, emb=temb)
+            (norm_encoder_hidden_states, c_gate_msa, c_shift_mlp, c_scale_mlp, c_gate_mlp) = norm_out_context
+
+        # Apply attention
+        attn_outputs = self.attn(
+            hidden_states=norm_hidden_states,
+            encoder_hidden_states=norm_encoder_hidden_states,
+            deterministic=deterministic
+        )
+        attn_output, context_attn_output = attn_outputs
+
+        # Process attention outputs for hidden states
+        attn_output = gate_msa.reshape(-1, 1) * attn_output
+        hidden_states = hidden_states + attn_output
+
+        # Apply dual attention if enabled
+        if self.use_dual_attention:
+            attn_output2 = self.attn2(hidden_states=norm_hidden_states2, deterministic=deterministic)
+            attn_output2 = gate_msa2.reshape(-1, 1) * attn_output2
+            hidden_states = hidden_states + attn_output2
+
+        # Apply feed-forward
+        norm_hidden_states = self.norm2(hidden_states)
+        norm_hidden_states = norm_hidden_states * (1 + scale_mlp[:, None]) + shift_mlp[:, None]
+        ff_output = self.ff(norm_hidden_states, deterministic=deterministic)
+        ff_output = gate_mlp.reshape(-1, 1) * ff_output
+        hidden_states = hidden_states + ff_output
+
+        # Process context states if needed
+        if self.context_pre_only:
+            encoder_hidden_states = None
+        else:
+            # Process attention outputs for encoder hidden states
+            context_attn_output = c_gate_msa.reshape(-1, 1) * context_attn_output
+            encoder_hidden_states = encoder_hidden_states + context_attn_output
+
+            # Apply feed-forward to context
+            norm_encoder_hidden_states = self.norm2_context(encoder_hidden_states)
+            norm_encoder_hidden_states = norm_encoder_hidden_states * (1 + c_scale_mlp[:, None]) + c_shift_mlp[:, None]
+            context_ff_output = self.ff_context(norm_encoder_hidden_states, deterministic=deterministic)
+            context_ff_output = c_gate_mlp.reshape(-1, 1) * context_ff_output
+            encoder_hidden_states = encoder_hidden_states + context_ff_output
+
+        return encoder_hidden_states, hidden_states
 
 class FlaxTransformer2DModel(nn.Module):
     r"""
