@@ -26,6 +26,7 @@ else:
     _import_structure["pipeline_stable_diffusion_3"] = ["StableDiffusion3Pipeline"]
     _import_structure["pipeline_stable_diffusion_3_img2img"] = ["StableDiffusion3Img2ImgPipeline"]
     _import_structure["pipeline_stable_diffusion_3_inpaint"] = ["StableDiffusion3InpaintPipeline"]
+    _import_structure["pipeline_flax_sd3"] = ["FlaxStableDiffusion3Pipeline"]
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
@@ -37,6 +38,7 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
         from .pipeline_stable_diffusion_3 import StableDiffusion3Pipeline
         from .pipeline_stable_diffusion_3_img2img import StableDiffusion3Img2ImgPipeline
         from .pipeline_stable_diffusion_3_inpaint import StableDiffusion3InpaintPipeline
+        from .pipeline_flax_sd3 import FlaxStableDiffusion3Pipeline
 
 else:
     import sys
