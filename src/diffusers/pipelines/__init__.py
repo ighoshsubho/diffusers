@@ -425,6 +425,11 @@ else:
             "FlaxStableDiffusionXLPipeline",
         ]
     )
+    _import_structure["stable_diffsion_3"].extend(
+        [
+            "FlaxStableDiffusion3Pipeline",
+        ]
+    )
 
 if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
     try:
@@ -746,6 +751,7 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             from .stable_diffusion_xl import (
                 FlaxStableDiffusionXLPipeline,
             )
+            from .stable_diffusion_3 import FlaxStableDiffusion3Pipeline
 
         try:
             if not (is_transformers_available() and is_torch_available() and is_note_seq_available()):

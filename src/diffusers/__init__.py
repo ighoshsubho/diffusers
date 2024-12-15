@@ -977,6 +977,7 @@ if TYPE_CHECKING or DIFFUSERS_SLOW_IMPORT:
             FlaxStableDiffusionInpaintPipeline,
             FlaxStableDiffusionPipeline,
             FlaxStableDiffusionXLPipeline,
+            FlaxStableDiffusion3Pipeline
         )
 
     try:
