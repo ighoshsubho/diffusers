@@ -1,15 +1,16 @@
-from typing import Optional, Tuple
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
 from flax import linen as nn
+
 
 class FlaxJointAttnProcessor2_0:
     """
     Attention processor used typically in processing the SD3-like self-attention projections.
     Flax implementation of the joint attention processor.
     """
-    
+
     def __call__(
         self,
         attn: nn.Module,
@@ -54,19 +55,19 @@ class FlaxJointAttnProcessor2_0:
 
             # Reshape context projections
             encoder_hidden_states_query_proj = jnp.reshape(
-                encoder_hidden_states_query_proj, 
+                encoder_hidden_states_query_proj,
                 (batch_size, -1, attn.heads, head_dim)
             )
             encoder_hidden_states_query_proj = jnp.transpose(encoder_hidden_states_query_proj, (0, 2, 1, 3))
-            
+
             encoder_hidden_states_key_proj = jnp.reshape(
-                encoder_hidden_states_key_proj, 
+                encoder_hidden_states_key_proj,
                 (batch_size, -1, attn.heads, head_dim)
             )
             encoder_hidden_states_key_proj = jnp.transpose(encoder_hidden_states_key_proj, (0, 2, 1, 3))
-            
+
             encoder_hidden_states_value_proj = jnp.reshape(
-                encoder_hidden_states_value_proj, 
+                encoder_hidden_states_value_proj,
                 (batch_size, -1, attn.heads, head_dim)
             )
             encoder_hidden_states_value_proj = jnp.transpose(encoder_hidden_states_value_proj, (0, 2, 1, 3))

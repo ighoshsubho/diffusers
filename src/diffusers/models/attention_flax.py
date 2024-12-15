@@ -21,7 +21,11 @@ import jax
 import jax.numpy as jnp
 
 from diffusers.models.attention_processor_flax import FlaxJointAttnProcessor2_0
-from diffusers.models.normalization_flax_utils import FlaxAdaLayerNormContinuous, FlaxAdaLayerNormZero, FlaxSD35AdaLayerNormZeroX
+from diffusers.models.normalization_flax_utils import (
+    FlaxAdaLayerNormContinuous,
+    FlaxAdaLayerNormZero,
+    FlaxSD35AdaLayerNormZeroX,
+)
 
 
 def _query_chunk_attention(query, key, value, precision, key_chunk_size: int = 4096):
@@ -351,7 +355,7 @@ class FlaxJointTransformerBlock(nn.Module):
     qk_norm: Optional[str] = None
     use_dual_attention: bool = False
     dtype: jnp.dtype = jnp.float32
-    
+
     def setup(self):
         self.use_dual_attention = self.use_dual_attention
         self.context_pre_only = self.context_pre_only
@@ -366,7 +370,7 @@ class FlaxJointTransformerBlock(nn.Module):
         # Setup context normalization layers
         if context_norm_type == "ada_norm_continous":
             self.norm1_context = FlaxAdaLayerNormContinuous(
-                self.dim, 
+                self.dim,
                 self.dim,
                 elementwise_affine=False,
                 eps=1e-6,
@@ -425,7 +429,7 @@ class FlaxJointTransformerBlock(nn.Module):
             self.ff_context = None
 
     def __call__(
-        self, 
+        self,
         hidden_states: jnp.ndarray,
         encoder_hidden_states: jnp.ndarray,
         temb: jnp.ndarray,

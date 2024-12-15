@@ -4,7 +4,7 @@ import flax.linen as nn
 import jax.numpy as jnp
 
 from ...configuration_utils import ConfigMixin, register_to_config
-from ...models.attention_flax import FlaxFeedForward, FlaxJointTransformerBlock, FlaxAttention
+from ...models.attention_flax import FlaxAttention, FlaxFeedForward, FlaxJointTransformerBlock
 from ...models.attention_processor_flax import FlaxJointAttnProcessor2_0
 from ...models.modeling_flax_utils import FlaxModelMixin
 from ...models.normalization_flax_utils import FlaxAdaLayerNormContinuous, FlaxAdaLayerNormZero
@@ -28,7 +28,7 @@ class FlaxSD3SingleTransformerBlock(nn.Module):
         dtype (`jnp.dtype`, defaults to jnp.float32): The dtype of the computation.
     """
 
-    dim: int 
+    dim: int
     num_attention_heads: int
     attention_head_dim: int
     dtype: jnp.dtype = jnp.float32
@@ -38,7 +38,7 @@ class FlaxSD3SingleTransformerBlock(nn.Module):
         self.attn = FlaxAttention(
             query_dim=self.dim,
             dim_head=self.attention_head_dim,
-            heads=self.num_attention_heads,  
+            heads=self.num_attention_heads,
             out_dim=self.dim,
             bias=True,
             processor=FlaxJointAttnProcessor2_0(),
@@ -50,7 +50,7 @@ class FlaxSD3SingleTransformerBlock(nn.Module):
 
     def __call__(self, hidden_states: jnp.ndarray, temb: jnp.ndarray) -> jnp.ndarray:
         norm_hidden_states, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.norm1(hidden_states, emb=temb)
-        
+
         # Attention
         attn_output = self.attn(
             hidden_states=norm_hidden_states,
@@ -158,7 +158,7 @@ class FlaxSD3Transformer2DModel(FlaxModelMixin, ConfigMixin):
             eps=1e-6,
             dtype=self.dtype
         )
-        
+
         self.proj_out = nn.Dense(
             features=self.config.patch_size * self.config.patch_size * self.out_channels,
             dtype=self.dtype,

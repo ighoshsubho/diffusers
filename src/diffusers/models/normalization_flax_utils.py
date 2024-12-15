@@ -1,8 +1,11 @@
+from typing import Optional, Tuple
+
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from typing import Optional, Tuple
+
 from ..utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -28,7 +31,7 @@ class FlaxSD35AdaLayerNormZeroX(nn.Module):
             use_bias=self.bias,
             dtype=self.dtype
         )
-        
+
         if self.norm_type == "layer_norm":
             self.norm = nn.LayerNorm(
                 epsilon=1e-6,
@@ -39,12 +42,12 @@ class FlaxSD35AdaLayerNormZeroX(nn.Module):
             raise ValueError(f"Unsupported `norm_type` ({self.norm_type}) provided. Only 'layer_norm' is currently supported.")
 
     def __call__(
-        self, 
+        self,
         hidden_states: jnp.ndarray,
         emb: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, ...]:
         emb = self.linear(self.silu(emb))
-        
+
         # Split into 9 chunks for shifts, scales and gates
         chunks = jnp.split(emb, indices_or_sections=9, axis=1)
         shift_msa, scale_msa, gate_msa = chunks[0], chunks[1], chunks[2]
@@ -105,7 +108,7 @@ class FlaxAdaLayerNormZero(nn.Module):
         emb: Optional[jnp.ndarray] = None,
     ) -> Tuple[jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray, jnp.ndarray]:
         emb = self.linear(self.silu(emb))
-        
+
         # Split into 6 chunks for shifts, scales and gates
         chunks = jnp.split(emb, indices_or_sections=6, axis=1)
         shift_msa, scale_msa, gate_msa = chunks[0], chunks[1], chunks[2]
@@ -171,10 +174,10 @@ class FlaxAdaLayerNormContinuous(nn.Module):
     def __call__(self, x: jnp.ndarray, conditioning_embedding: jnp.ndarray) -> jnp.ndarray:
         # Ensure conditioning_embedding is in the correct dtype
         conditioning_embedding = conditioning_embedding.astype(x.dtype)
-        
+
         emb = self.linear(self.silu(conditioning_embedding))
         scale, shift = jnp.split(emb, indices_or_sections=2, axis=1)
-        
+
         x = self.norm(x) * (1 + scale[:, None, :]) + shift[:, None, :]
         return x
 
@@ -182,7 +185,7 @@ class FlaxAdaLayerNormContinuous(nn.Module):
 class RMSNorm(nn.Module):
     """
     Root Mean Square Layer Normalization.
-    
+
     Parameters:
         dim (`int`): The dimension to normalize over.
         eps (`float`): Small value for numerical stability.

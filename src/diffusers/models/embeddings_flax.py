@@ -70,16 +70,16 @@ def get_sinusoidal_embeddings(
 def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int, cls_token: bool = False, extra_tokens: int = 0, base_size: int = 16) -> np.ndarray:
     """
     Creates 2D sinusoidal positional embeddings.
-    
+
     Args:
         embed_dim (`int`): The embedding dimension.
         grid_size (`int`): Size of the grid (height and width).
         cls_token (`bool`, defaults to `False`): Whether to add classification token.
         extra_tokens (`int`, defaults to `0`): Number of extra tokens.
         base_size (`int`, defaults to `16`): Base size for positional embeddings.
-    
+
     Returns:
-        `np.ndarray`: The positional embeddings with shape `[grid_size * grid_size, embed_dim]` 
+        `np.ndarray`: The positional embeddings with shape `[grid_size * grid_size, embed_dim]`
         or `[1 + grid_size * grid_size, embed_dim]` if using cls_token.
     """
     if isinstance(grid_size, int):
@@ -92,7 +92,7 @@ def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int, cls_token: bool = Fa
 
     grid = grid.reshape([2, 1, grid_size[1], grid_size[0]])
     pos_embed = get_2d_sincos_pos_embed_from_grid(embed_dim, grid)
-    
+
     if cls_token and extra_tokens > 0:
         pos_embed = np.concatenate([np.zeros([extra_tokens, embed_dim]), pos_embed], axis=0)
     return pos_embed
@@ -100,11 +100,11 @@ def get_2d_sincos_pos_embed(embed_dim: int, grid_size: int, cls_token: bool = Fa
 def get_2d_sincos_pos_embed_from_grid(embed_dim: int, grid: np.ndarray) -> np.ndarray:
     """
     Generate 2D sinusoidal positional embeddings from a grid.
-    
+
     Args:
         embed_dim (`int`): The embedding dimension.
         grid (`np.ndarray`): Grid of positions.
-    
+
     Returns:
         `np.ndarray`: Shape `[H * W, embed_dim]`
     """
@@ -121,11 +121,11 @@ def get_2d_sincos_pos_embed_from_grid(embed_dim: int, grid: np.ndarray) -> np.nd
 def get_1d_sincos_pos_embed_from_grid(embed_dim: int, pos: np.ndarray) -> np.ndarray:
     """
     Generate 1D positional embeddings from a grid.
-    
+
     Args:
         embed_dim (`int`): The embedding dimension.
         pos (`np.ndarray`): 1D tensor of positions.
-    
+
     Returns:
         `np.ndarray`: Shape `[M, D]`
     """
@@ -190,7 +190,7 @@ class FlaxTimesteps(nn.Module):
         return get_sinusoidal_embeddings(
             timesteps, embedding_dim=self.dim, flip_sin_to_cos=self.flip_sin_to_cos, freq_shift=self.freq_shift
         )
-    
+
 class FlaxPatchEmbed(nn.Module):
     """
     2D Image to Patch Embedding with support for SD3 cropping.
@@ -244,10 +244,10 @@ class FlaxPatchEmbed(nn.Module):
         self.patch_height = self.height // self.patch_size
         self.patch_width = self.width // self.patch_size
         self.base_size = self.height // self.patch_size
-        
+
         # Initialize positional embeddings
         grid_size = self.pos_embed_max_size if self.pos_embed_max_size else int(self.num_patches ** 0.5)
-        
+
         if self.pos_embed_type == "sincos":
             pos_embed = get_2d_sincos_pos_embed(self.embed_dim, grid_size, base_size=self.base_size)
             self.pos_embed = self.param(
@@ -265,7 +265,7 @@ class FlaxPatchEmbed(nn.Module):
 
         height = height // self.patch_size
         width = width // self.patch_size
-        
+
         if height > self.pos_embed_max_size or width > self.pos_embed_max_size:
             raise ValueError(
                 f"Height ({height}) and width ({width}) must be less than pos_embed_max_size: {self.pos_embed_max_size}."
@@ -273,7 +273,7 @@ class FlaxPatchEmbed(nn.Module):
 
         top = (self.pos_embed_max_size - height) // 2
         left = (self.pos_embed_max_size - width) // 2
-        
+
         spatial_pos_embed = self.pos_embed.reshape(1, self.pos_embed_max_size, self.pos_embed_max_size, -1)
         spatial_pos_embed = jax.lax.dynamic_slice(
             spatial_pos_embed,
@@ -290,7 +290,7 @@ class FlaxPatchEmbed(nn.Module):
             width = latent.shape[-1] // self.patch_size
 
         latent = self.proj(latent)
-        
+
         if self.flatten:
             latent = jnp.reshape(latent, (latent.shape[0], -1, self.embed_dim))
 
@@ -314,7 +314,7 @@ class FlaxPatchEmbed(nn.Module):
             latent = latent + pos_embed
 
         return latent.astype(self.dtype)
-    
+
 class FlaxCombinedTimestepTextProjEmbeddings(nn.Module):
     """
     Combined embeddings for timesteps and text projections.
@@ -325,7 +325,7 @@ class FlaxCombinedTimestepTextProjEmbeddings(nn.Module):
         dtype (`jnp.dtype`): The dtype of the computation.
     """
     embedding_dim: int
-    pooled_projection_dim: int 
+    pooled_projection_dim: int
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
@@ -335,14 +335,14 @@ class FlaxCombinedTimestepTextProjEmbeddings(nn.Module):
             downscale_freq_shift=0,
             dtype=self.dtype
         )
-        
+
         # Setup timestep embedder
         self.timestep_embedder = nn.Sequential([
             nn.Dense(features=self.embedding_dim, dtype=self.dtype),
             nn.SiLU(),
             nn.Dense(features=self.embedding_dim, dtype=self.dtype),
         ])
-        
+
         # Setup text projection
         self.text_proj = nn.Sequential([
             nn.LayerNorm(dtype=self.dtype),
@@ -356,7 +356,7 @@ class FlaxCombinedTimestepTextProjEmbeddings(nn.Module):
 
         # Project text embeddings
         pooled_projections = self.text_proj(pooled_projection)
-        
+
         # Combine embeddings
         conditioning = timesteps_emb + pooled_projections
 
